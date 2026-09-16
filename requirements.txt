@@ -1,0 +1,48 @@
+# ============================================================
+# GenAI Enterprise Lab - Python Runtime Dependencies
+# ============================================================
+
+# FastAPI
+# Framework Python moderne pour construire les API REST du projet.
+# Utilisé pour exposer les endpoints /health, agents, RAG, SQL, etc.
+fastapi
+
+# Uvicorn
+# Serveur ASGI qui exécute l'application FastAPI.
+# [standard] ajoute notamment les dépendances utiles au reload et aux performances.
+uvicorn[standard]
+
+# Pydantic
+# Validation, typage et sérialisation des données Python.
+# Utilisé pour définir les modèles d'entrée/sortie de nos API.
+pydantic
+
+# Pydantic Settings
+# Gestion typée de la configuration et des variables d'environnement.
+# Utilisé notamment pour lire le fichier .env.
+pydantic-settings
+
+# SQLAlchemy
+# Toolkit SQL / ORM Python.
+# Gère la connexion, les requêtes et les transactions avec PostgreSQL.
+sqlalchemy
+
+# Psycopg
+# Driver PostgreSQL moderne pour Python.
+# [binary] fournit une installation prête à l'emploi sans compilation locale.
+psycopg[binary]
+
+# pgvector
+# Support Python de l'extension PostgreSQL pgvector.
+# Sera utilisé pour stocker et rechercher des embeddings dans le RAG.
+pgvector
+
+# Python Dotenv
+# Chargement des variables d'environnement depuis un fichier .env.
+# Utile pour les configurations locales de développement.
+python-dotenv
+
+# HTTPX
+# Client HTTP moderne synchrone et asynchrone.
+# Utilisé pour appeler des API externes et tester nos endpoints FastAPI.
+httpx

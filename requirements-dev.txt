@@ -1,0 +1,21 @@
+# ============================================================
+# GenAI Enterprise Lab - Development Dependencies
+# ============================================================
+
+# Inclut toutes les dépendances runtime de l'application.
+-r requirements.txt
+
+# Pytest
+# Framework de tests Python.
+# Utilisé pour les tests unitaires et les tests d'intégration.
+pytest
+
+# Pytest AsyncIO
+# Support des tests asynchrones avec pytest.
+# Sera utile pour les agents, appels API et traitements async.
+pytest-asyncio
+
+# Ruff
+# Linter et formateur Python très rapide.
+# Vérifie notamment le style, les imports et certaines erreurs de code.
+ruff
