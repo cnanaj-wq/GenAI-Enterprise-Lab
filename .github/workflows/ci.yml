@@ -1,0 +1,112 @@
+name: GenAI Enterprise Lab CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+
+  backend:
+    name: Backend - Python / FastAPI / PostgreSQL
+    runs-on: ubuntu-latest
+
+    env:
+      POSTGRES_DB: genai_lab
+      POSTGRES_USER: genai
+      POSTGRES_PASSWORD: ci_password
+      POSTGRES_PORT: 5432
+
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg18
+
+        env:
+          POSTGRES_DB: genai_lab
+          POSTGRES_USER: genai
+          POSTGRES_PASSWORD: ci_password
+
+        ports:
+          - 5432:5432
+
+        options: >-
+          --health-cmd "pg_isready -U genai -d genai_lab"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install Python dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Enable pgvector extension
+        run: |
+          python - <<'PY'
+          import psycopg
+
+          with psycopg.connect(
+              dbname="genai_lab",
+              user="genai",
+              password="ci_password",
+              host="127.0.0.1",
+              port=5432,
+              autocommit=True,
+          ) as connection:
+              connection.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+          print("pgvector extension enabled")
+          PY
+
+      - name: Run Ruff
+        run: ruff check .
+
+      - name: Run Pytest
+        run: python -m pytest -v
+
+
+  frontend:
+    name: Frontend - TypeScript / Next.js
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Build Next.js production application
+        run: npm run build
