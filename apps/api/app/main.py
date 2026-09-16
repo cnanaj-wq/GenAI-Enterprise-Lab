@@ -23,11 +23,25 @@ def root():
 def health():
     try:
         with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
+            postgresql_version = connection.execute(
+                text("SELECT current_setting('server_version')")
+            ).scalar_one()
+
+            pgvector_version = connection.execute(
+                text(
+                    """
+                    SELECT extversion
+                    FROM pg_extension
+                    WHERE extname = 'vector'
+                    """
+                )
+            ).scalar_one_or_none()
 
         return {
             "api": "healthy",
             "database": "healthy",
+            "postgresql": postgresql_version,
+            "pgvector": pgvector_version or "not_installed",
         }
 
     except SQLAlchemyError:
@@ -36,5 +50,7 @@ def health():
             content={
                 "api": "healthy",
                 "database": "unhealthy",
+                "postgresql": None,
+                "pgvector": None,
             },
         )

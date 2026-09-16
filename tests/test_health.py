@@ -16,7 +16,10 @@ def test_health():
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "api": "healthy",
-        "database": "healthy",
-    }
+
+    payload = response.json()
+
+    assert payload["api"] == "healthy"
+    assert payload["database"] == "healthy"
+    assert payload["postgresql"].startswith("18.")
+    assert payload["pgvector"] == "0.8.6"
