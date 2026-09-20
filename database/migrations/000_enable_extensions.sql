@@ -1,5 +1,5 @@
 -- GenAI Enterprise Lab
--- Database extensions required by the platform.
+-- Required PostgreSQL extensions.
 
 BEGIN;
 
