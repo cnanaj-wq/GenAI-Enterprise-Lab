@@ -46,3 +46,12 @@ python-dotenv
 # Client HTTP moderne synchrone et asynchrone.
 # Utilisé pour appeler des API externes et tester nos endpoints FastAPI.
 httpx
+
+# Agent workflow orchestration
+langgraph==1.2.11
+
+# OpenAI Responses API SDK
+openai
+
+# Model Context Protocol SDK v2
+mcp[cli]>=2,<3

@@ -1,0 +1,73 @@
+{
+  "ci": {
+    "seed": 42,
+    "period_start": "2026-08-01T00:00:00+02:00",
+    "period_end": "2026-09-01T00:00:00+02:00",
+    "applications": 10,
+    "data_sources": 8,
+    "application_dependencies": 60,
+    "reload_jobs": 2000,
+    "reload_logs": 20000,
+    "incidents": 150,
+    "incident_events": 600,
+    "jira_tickets": 120
+  },
+  "dev": {
+    "seed": 42,
+    "period_start": "2026-01-01T00:00:00+01:00",
+    "period_end": "2026-09-01T00:00:00+02:00",
+    "applications": 50,
+    "data_sources": 30,
+    "application_dependencies": 700,
+    "reload_jobs": 50000,
+    "reload_logs": 500000,
+    "incidents": 3000,
+    "incident_events": 12000,
+    "jira_tickets": 2500
+  },
+  "benchmark": {
+    "seed": 42,
+    "period_start": "2024-01-01T00:00:00+01:00",
+    "period_end": "2026-09-01T00:00:00+02:00",
+    "applications": 150,
+    "data_sources": 80,
+    "application_dependencies": 2000,
+    "reload_jobs": 600000,
+    "reload_logs": 10000000,
+    "incidents": 45000,
+    "incident_events": 180000,
+    "jira_tickets": 35000
+  },
+  "stress": {
+    "seed": 42,
+    "period_start": "2024-01-01T00:00:00+01:00",
+    "period_end": "2026-09-01T00:00:00+02:00",
+    "applications": 150,
+    "data_sources": 80,
+    "application_dependencies": 2000,
+    "reload_jobs": 1200000,
+    "reload_logs": 25000000,
+    "incidents": 90000,
+    "incident_events": 360000,
+    "jira_tickets": 70000
+  },
+  "generation_rules": {
+    "reload_failure_rate": 0.07,
+    "sla_breach_rate": 0.05,
+    "failed_reload_incident_rate": 0.65,
+    "incident_jira_rate": 0.78,
+    "critical_application_share": 0.15,
+    "root_cause_distribution": {
+      "DB_TIMEOUT": 0.22,
+      "NETWORK_TIMEOUT": 0.12,
+      "DISK_SATURATION": 0.08,
+      "AUTH_FAILURE": 0.1,
+      "SOURCE_UNAVAILABLE": 0.15,
+      "FILE_MISSING": 0.1,
+      "DEPENDENCY_FAILURE": 0.1,
+      "MEMORY_EXHAUSTION": 0.06,
+      "LONG_RUNNING_QUERY": 0.04,
+      "SCHEDULER_FAILURE": 0.03
+    }
+  }
+}

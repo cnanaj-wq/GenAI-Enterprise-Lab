@@ -1,0 +1,297 @@
+.root {
+  display: grid;
+  gap: 18px;
+}
+
+.hero,
+.filters,
+.method,
+.sectionHeader,
+.card,
+.kpis article,
+.error,
+.empty {
+  border: 1px solid #1f304d;
+  background: #0c162b;
+  border-radius: 14px;
+}
+
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+  padding: 20px;
+}
+
+.eyebrow,
+.filters span,
+.kpis span,
+.flow span,
+.methodLabel {
+  color: #6fdcff;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+.hero h2 {
+  margin: 5px 0 6px;
+  font-size: 25px;
+}
+
+.subtitle {
+  margin: 0;
+  color: #8da6c9;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.badges span {
+  border: 1px solid #1b89a8;
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: #5de6ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.filters {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filters label {
+  display: grid;
+  gap: 7px;
+}
+
+.filters select {
+  min-width: 0;
+  border: 1px solid #2b3b5a;
+  border-radius: 9px;
+  background: #071126;
+  color: #f4f7fb;
+  padding: 10px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpis article {
+  padding: 16px;
+  display: grid;
+  gap: 8px;
+}
+
+.kpis strong {
+  font-size: 22px;
+}
+
+.kpis small {
+  color: #7f96b7;
+}
+
+.method {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: center;
+}
+
+.method > div {
+  display: grid;
+  gap: 5px;
+}
+
+.method p {
+  margin: 0;
+  color: #8da6c9;
+  text-align: right;
+}
+
+.sectionHeader {
+  padding: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: center;
+}
+
+.sectionHeader h3 {
+  margin: 0 0 5px;
+  font-size: 15px;
+}
+
+.sectionHeader p {
+  margin: 0;
+  color: #8196b6;
+  font-size: 12px;
+}
+
+.sectionHeader button {
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: #11bddd;
+  color: #03101c;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sectionHeader button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.cards {
+  display: grid;
+  gap: 14px;
+}
+
+.card {
+  padding: 18px;
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.cardTop > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cardTop code {
+  color: #7285a6;
+}
+
+.priority,
+.category {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.priority {
+  border: 1px solid #355073;
+}
+
+.high {
+  color: #ff8585;
+  border-color: #7e3440;
+}
+
+.medium {
+  color: #ffd166;
+  border-color: #6c5a2b;
+}
+
+.low {
+  color: #7ee6ae;
+  border-color: #2d6949;
+}
+
+.category {
+  color: #8fb8ff;
+  border: 1px solid #334c75;
+}
+
+.card h4 {
+  margin: 14px 0;
+  font-size: 18px;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.flow > div {
+  min-width: 0;
+  border: 1px solid #172944;
+  background: #071226;
+  border-radius: 10px;
+  padding: 13px;
+}
+
+.flow p {
+  margin: 7px 0 0;
+  color: #c1cce0;
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.cardFooter {
+  margin-top: 14px;
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  color: #7288a8;
+  font-size: 11px;
+}
+
+.cardFooter b {
+  color: #dce8f8;
+}
+
+.error,
+.empty {
+  padding: 16px;
+}
+
+.error {
+  border-color: #6a2b38;
+  color: #ff9292;
+}
+
+.empty {
+  color: #80dca8;
+}
+
+@media (max-width: 1200px) {
+  .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  .hero,
+  .method,
+  .sectionHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filters,
+  .kpis,
+  .flow {
+    grid-template-columns: 1fr;
+  }
+
+  .method p {
+    text-align: left;
+  }
+}

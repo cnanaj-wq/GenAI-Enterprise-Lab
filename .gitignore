@@ -37,3 +37,11 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+.agents/
+.claude/
+*.bak_*
+README_STEP_*.md
+sync_module1_github.ps1
+scripts/activate_optimize.ps1
+scripts/activate_usage_cost.ps1
+scripts/run_ruff_cleanup.ps1
