@@ -11,6 +11,9 @@ import {
   ReactFlow,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import ProjectHealthPanel from "@/components/ProjectHealthPanel";
+import UsageCostPanel from "@/components/UsageCostPanel";
+import OptimizePanel from "@/components/OptimizePanel";
 
 const API_BASE = process.env.NEXT_PUBLIC_FASTAPI_URL ?? "http://127.0.0.1:8000";
 
@@ -77,6 +80,76 @@ type MCPStatus = {
   endpoint?: string;
   protocol_version?: string;
   tool_count?: number;
+};
+
+type ViewMode = "LIVE" | "HISTORY" | "COMPARE" | "PROJECT HEALTH" | "USAGE & COST" | "OPTIMIZE";
+
+type HistoryItem = {
+  trace_id: string;
+  prompt: string;
+  status: string;
+  started_at: string;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  provider?: string | null;
+  model?: string | null;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  application_name?: string | null;
+  resilience: "OK" | "RETRY" | "FALLBACK" | "FAILED";
+};
+
+type TraceReplay = {
+  replay: boolean;
+  trace: {
+    trace_id: string;
+    prompt: string;
+    status: string;
+    started_at: string;
+    finished_at?: string | null;
+    duration_ms?: number | null;
+    provider?: string | null;
+    model?: string | null;
+    input_tokens?: number | null;
+    output_tokens?: number | null;
+    estimated_cost_usd?: number | null;
+    error_type?: string | null;
+    error_message?: string | null;
+  };
+  spans: Array<{
+    span_id: string;
+    parent_span_id?: string | null;
+    sequence_no: number;
+    span_type: string;
+    name: string;
+    status: string;
+    duration_ms?: number | null;
+  }>;
+  events: EventPayload[];
+  summary?: Record<string, unknown> | null;
+  diagnosis?: Record<string, unknown> | null;
+  execution_breakdown?: Breakdown | null;
+};
+
+type CompareMetrics = {
+  traceId: string;
+  date: string;
+  application: string;
+  status: string;
+  resilience: "OK" | "RETRY" | "FALLBACK" | "FAILED";
+  configuredModel: string;
+  executionMode: "LLM" | "FALLBACK" | "FAILED";
+  totalMs: number;
+  mcpMs: number;
+  llmMs: number;
+  unattributedMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  errorCount: number;
 };
 
 const TYPE_META: Record<
@@ -163,6 +236,94 @@ function statusSymbol(status: SpanStatus) {
   return "○";
 }
 
+
+function buildCompareMetrics(replay: TraceReplay): CompareMetrics {
+  const events = replay.events ?? [];
+  const spans = replay.spans ?? [];
+  const breakdown = replay.execution_breakdown;
+
+  const hasFallback = events.some(
+    (event) => event.event_type === "fallback_used"
+  );
+  const hasRetry = events.some(
+    (event) => event.event_type === "mcp_retry_scheduled"
+  );
+  const runFailed = replay.trace.status === "ERROR";
+
+  const resilience: CompareMetrics["resilience"] = runFailed
+    ? "FAILED"
+    : hasFallback
+      ? "FALLBACK"
+      : hasRetry
+        ? "RETRY"
+        : "OK";
+
+  const executionMode: CompareMetrics["executionMode"] = runFailed
+    ? "FAILED"
+    : hasFallback
+      ? "FALLBACK"
+      : "LLM";
+
+  const sumSpanType = (spanType: string) =>
+    spans
+      .filter((span) => span.span_type === spanType)
+      .reduce((total, span) => total + Number(span.duration_ms ?? 0), 0);
+
+  const inputTokens = Number(replay.trace.input_tokens ?? 0);
+  const outputTokens = Number(replay.trace.output_tokens ?? 0);
+  const failedSpans = spans.filter((span) => span.status === "ERROR").length;
+  const runErrors = events.filter((event) => event.event_type === "run_error").length;
+
+  return {
+    traceId: replay.trace.trace_id,
+    date: replay.trace.started_at,
+    application: String(replay.summary?.application ?? "—"),
+    status: replay.trace.status,
+    resilience,
+    configuredModel: replay.trace.model ?? "—",
+    executionMode,
+    totalMs: Number(replay.trace.duration_ms ?? 0),
+    mcpMs: Number(breakdown?.mcp_duration_ms ?? sumSpanType("MCP")),
+    llmMs: Number(breakdown?.llm_duration_ms ?? sumSpanType("LLM")),
+    unattributedMs: Number(
+      breakdown?.unattributed_ms ??
+        Math.max(
+          Number(replay.trace.duration_ms ?? 0) -
+            sumSpanType("MCP") -
+            sumSpanType("LLM"),
+          0
+        )
+    ),
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: Number(replay.trace.estimated_cost_usd ?? 0),
+    errorCount: failedSpans + runErrors,
+  };
+}
+
+function deltaPercent(a: number, b: number): number | null {
+  if (a === 0) return null;
+  return ((b - a) / a) * 100;
+}
+
+function formatDelta(a: number, b: number): string {
+  const delta = deltaPercent(a, b);
+  if (delta === null) return a === b ? "0.0%" : "n/a";
+  const sign = delta > 0 ? "+" : "";
+  return `${sign}${delta.toFixed(1)}%`;
+}
+
+function deltaClass(
+  a: number,
+  b: number,
+  mode: "lower-is-better" | "neutral" = "lower-is-better"
+) {
+  if (a === b) return "text-slate-400";
+  if (mode === "neutral") return "text-cyan-300";
+  return b < a ? "text-emerald-300" : "text-red-300";
+}
+
 export default function Home() {
   const [prompt, setPrompt] = useState(
     "Pourquoi Sales_Analytics_033 a échoué lors de son dernier reload ?"
@@ -183,6 +344,18 @@ export default function Home() {
   const [llmMetric, setLlmMetric] = useState<LLMMetric | null>(null);
   const [mcpStatus, setMcpStatus] = useState<MCPStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [degraded, setDegraded] = useState(false);
+  const [activeView, setActiveView] = useState<ViewMode>("LIVE");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [replayMode, setReplayMode] = useState(false);
+  const [compareTraceA, setCompareTraceA] = useState("");
+  const [compareTraceB, setCompareTraceB] = useState("");
+  const [compareA, setCompareA] = useState<TraceReplay | null>(null);
+  const [compareB, setCompareB] = useState<TraceReplay | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
 
   const refreshMcpStatus = useCallback(async () => {
@@ -201,7 +374,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    void refreshMcpStatus();
+    const timer = window.setTimeout(() => {
+      void refreshMcpStatus();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [refreshMcpStatus]);
 
   const resetRun = useCallback(() => {
@@ -219,6 +396,8 @@ export default function Home() {
     setDiagnosis(null);
     setLlmMetric(null);
     setErrorMessage(null);
+    setDegraded(false);
+    setReplayMode(false);
   }, []);
 
   const handleEvent = useCallback((event: EventPayload) => {
@@ -240,17 +419,18 @@ export default function Home() {
 
       setSpans((current) => {
         const without = current.filter((span) => span.spanId !== spanId);
-        return [
-          ...without,
-          {
-            spanId,
-            parentSpanId,
-            name: String(data.name ?? "unknown"),
-            spanType: normalizeSpanType(data.span_type),
-            status: "RUNNING",
-            sequenceNo: Number(data.sequence_no ?? 0),
-          },
-        ].sort((a, b) => a.sequenceNo - b.sequenceNo);
+        const nextSpan: SpanView = {
+          spanId,
+          parentSpanId,
+          name: String(data.name ?? "unknown"),
+          spanType: normalizeSpanType(data.span_type),
+          status: "RUNNING",
+          sequenceNo: Number(data.sequence_no ?? 0),
+        };
+
+        return [...without, nextSpan].sort(
+          (a, b) => a.sequenceNo - b.sequenceNo
+        );
       });
     }
 
@@ -290,6 +470,10 @@ export default function Home() {
 
     if (event.event_type === "execution_breakdown") {
       setBreakdown(data as unknown as Breakdown);
+    }
+
+    if (event.event_type === "fallback_used") {
+      setDegraded(true);
     }
 
     if (event.event_type === "run_error") {
@@ -332,6 +516,9 @@ export default function Home() {
       "span_started",
       "span_finished",
       "mcp_measurement",
+      "mcp_retry_scheduled",
+      "mcp_circuit_opened",
+      "fallback_used",
       "route_decision",
       "llm_measurement",
       "diagnosis_ready",
@@ -346,16 +533,201 @@ export default function Home() {
         const parsed = JSON.parse((message as MessageEvent).data) as EventPayload;
         handleEvent(parsed);
 
-        if (
-          parsed.event_type === "execution_breakdown" ||
-          parsed.event_type === "run_error"
-        ) {
+        if (parsed.event_type === "execution_breakdown") {
           source.close();
           sourceRef.current = null;
         }
       });
     }
   }, [applicationName, handleEvent, prompt, refreshMcpStatus, resetRun]);
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/v1/investigations/history?limit=100`,
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+      }
+
+      const payload = (await response.json()) as {
+        count: number;
+        items: HistoryItem[];
+      };
+      setHistory(payload.items);
+
+      if (payload.items.length > 0) {
+        setCompareTraceA((current) => current || payload.items[0].trace_id);
+      }
+      if (payload.items.length > 1) {
+        setCompareTraceB((current) => current || payload.items[1].trace_id);
+      }
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== "HISTORY" && activeView !== "COMPARE") {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void refreshHistory();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [activeView, refreshHistory]);
+
+  const replayHistoricalTrace = useCallback(
+    async (historicalTraceId: string) => {
+      sourceRef.current?.close();
+      sourceRef.current = null;
+      setHistoryError(null);
+
+      const response = await fetch(
+        `${API_BASE}/api/v1/investigations/traces/${historicalTraceId}/replay`,
+        { cache: "no-store" }
+      );
+
+      if (!response.ok) {
+        setHistoryError(`HTTP ${response.status}: ${await response.text()}`);
+        return;
+      }
+
+      const replay = (await response.json()) as TraceReplay;
+      const replayEvents = replay.events ?? [];
+      const replaySpans = replay.spans ?? [];
+
+      setReplayMode(true);
+      setActiveView("LIVE");
+      setRunId(null);
+      setTraceId(replay.trace.trace_id);
+      setPrompt(replay.trace.prompt);
+      setApplicationName(String(replay.summary?.application ?? ""));
+      setStatus(
+        replay.trace.status === "SUCCESS"
+          ? "SUCCESS"
+          : replay.trace.status === "ERROR"
+            ? "ERROR"
+            : "IDLE"
+      );
+      setStartedAt(replay.trace.started_at);
+      setFinishedAt(replay.trace.finished_at ?? null);
+      setEvents(replayEvents);
+      setSpans(
+        replaySpans.map((span) => ({
+          spanId: span.span_id,
+          parentSpanId: span.parent_span_id ?? null,
+          name: span.name,
+          spanType: normalizeSpanType(span.span_type),
+          status:
+            span.status === "SUCCESS"
+              ? "SUCCESS"
+              : span.status === "ERROR"
+                ? "ERROR"
+                : "WAITING",
+          durationMs: span.duration_ms ?? undefined,
+          sequenceNo: span.sequence_no,
+        }))
+      );
+
+      setSummary(replay.summary ?? null);
+      setBreakdown(replay.execution_breakdown ?? null);
+
+      const diagnosisEvent = [...replayEvents]
+        .reverse()
+        .find((event) => event.event_type === "diagnosis_ready");
+
+      if (diagnosisEvent?.event_data) {
+        setDiagnosis(String(diagnosisEvent.event_data.diagnosis ?? ""));
+        setLlmMetric(diagnosisEvent.event_data as unknown as LLMMetric);
+      } else {
+        setDiagnosis(null);
+        setLlmMetric(null);
+      }
+
+      setDegraded(
+        replayEvents.some((event) => event.event_type === "fallback_used")
+      );
+
+      const runError = [...replayEvents]
+        .reverse()
+        .find((event) => event.event_type === "run_error");
+
+      setErrorMessage(
+        runError?.event_data
+          ? String(runError.event_data.error_message ?? "Historical run error")
+          : null
+      );
+    },
+    []
+  );
+
+  const loadComparison = useCallback(async () => {
+    setCompareError(null);
+
+    if (!compareTraceA || !compareTraceB) {
+      setCompareError("Sélectionne deux traces.");
+      return;
+    }
+
+    if (compareTraceA === compareTraceB) {
+      setCompareError("Trace A et Trace B doivent être différentes.");
+      return;
+    }
+
+    setCompareLoading(true);
+
+    try {
+      const [responseA, responseB] = await Promise.all([
+        fetch(
+          `${API_BASE}/api/v1/investigations/traces/${compareTraceA}/replay`,
+          { cache: "no-store" }
+        ),
+        fetch(
+          `${API_BASE}/api/v1/investigations/traces/${compareTraceB}/replay`,
+          { cache: "no-store" }
+        ),
+      ]);
+
+      if (!responseA.ok) {
+        throw new Error(`Trace A: HTTP ${responseA.status}`);
+      }
+      if (!responseB.ok) {
+        throw new Error(`Trace B: HTTP ${responseB.status}`);
+      }
+
+      const [payloadA, payloadB] = (await Promise.all([
+        responseA.json(),
+        responseB.json(),
+      ])) as [TraceReplay, TraceReplay];
+
+      setCompareA(payloadA);
+      setCompareB(payloadB);
+    } catch (error) {
+      setCompareError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCompareLoading(false);
+    }
+  }, [compareTraceA, compareTraceB]);
+
+  const compareMetricsA = useMemo(
+    () => (compareA ? buildCompareMetrics(compareA) : null),
+    [compareA]
+  );
+
+  const compareMetricsB = useMemo(
+    () => (compareB ? buildCompareMetrics(compareB) : null),
+    [compareB]
+  );
 
   const graphNodes = useMemo<Node[]>(() => {
     if (spans.length === 0) {
@@ -504,6 +876,18 @@ export default function Home() {
               MCP ● {mcpStatus?.mcp === "healthy" ? "CONNECTED" : "UNAVAILABLE"}
             </span>
 
+            {degraded && (
+              <span className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-300">
+                DEGRADED MODE
+              </span>
+            )}
+
+            {replayMode && (
+              <span className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-semibold text-violet-300">
+                REPLAY
+              </span>
+            )}
+
             <span
               className={`rounded-full px-3 py-1 text-xs font-semibold ${
                 status === "RUNNING"
@@ -519,6 +903,333 @@ export default function Home() {
             </span>
           </div>
         </header>
+
+        <nav className="rounded-2xl border border-slate-800 bg-slate-900/70 p-2">
+          <div className="flex flex-wrap gap-2">
+            {(["LIVE", "HISTORY", "COMPARE", "PROJECT HEALTH", "USAGE & COST", "OPTIMIZE"] as ViewMode[]).map((view) => (
+              <button
+                key={view}
+                type="button"
+                onClick={() => setActiveView(view)}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  activeView === view
+                    ? "bg-cyan-500 text-slate-950"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                }`}
+              >
+                {view}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {activeView === "HISTORY" ? (
+          <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
+              <div>
+                <h2 className="font-semibold">INVESTIGATION HISTORY</h2>
+                <p className="text-xs text-slate-400">
+                  Traces persistées dans PostgreSQL. Replay = reconstruction sans nouvel appel MCP/LLM.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshHistory()}
+                disabled={historyLoading}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 disabled:opacity-40"
+              >
+                {historyLoading ? "Chargement..." : "Rafraîchir"}
+              </button>
+            </div>
+
+            {historyError && (
+              <div className="m-4 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                {historyError}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="bg-slate-950/70 text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3">Application</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Resilience</th>
+                    <th className="px-4 py-3">Model</th>
+                    <th className="px-4 py-3 text-right">Duration</th>
+                    <th className="px-4 py-3 text-right">Tokens</th>
+                    <th className="px-4 py-3 text-right">Cost</th>
+                    <th className="px-4 py-3">Trace</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.length === 0 && !historyLoading ? (
+                    <tr>
+                      <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
+                        Aucune trace persistée.
+                      </td>
+                    </tr>
+                  ) : (
+                    history.map((item, index) => (
+                      <tr
+                        key={item.trace_id}
+                        className={`border-t border-slate-800 ${
+                          index % 2 === 1 ? "bg-slate-950/25" : ""
+                        }`}
+                      >
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-300">
+                          {formatLocalTime(item.started_at)}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-200">
+                          {item.application_name ?? "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2 py-1 font-semibold ${
+                              item.status === "SUCCESS"
+                                ? "bg-emerald-500/15 text-emerald-300"
+                                : item.status === "ERROR"
+                                  ? "bg-red-500/15 text-red-300"
+                                  : "bg-amber-500/15 text-amber-300"
+                            }`}
+                          >
+                            {item.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-slate-300">{item.resilience}</td>
+                        <td className="px-4 py-3 text-slate-300">{item.model ?? "—"}</td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-300">
+                          {formatDuration(item.duration_ms ?? undefined)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-300">
+                          {item.total_tokens}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono text-slate-300">
+                          ${Number(item.estimated_cost_usd ?? 0).toFixed(6)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-slate-400">
+                          {item.trace_id.slice(0, 8)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => void replayHistoricalTrace(item.trace_id)}
+                            className="rounded-lg bg-violet-500/15 px-3 py-2 font-semibold text-violet-300 hover:bg-violet-500/25"
+                          >
+                            Replay
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : activeView === "OPTIMIZE" ? (
+          <OptimizePanel />
+        ) : activeView === "USAGE & COST" ? (
+          <UsageCostPanel />
+        ) : activeView === "PROJECT HEALTH" ? (
+          <ProjectHealthPanel />
+        ) : activeView === "COMPARE" ? (
+          <section className="space-y-5">
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+              <div className="mb-5">
+                <h2 className="font-semibold">TRACE COMPARE</h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  Compare deux exécutions persistées. Delta = Trace B vs Trace A.
+                  Aucun appel MCP ou LLM supplémentaire.
+                </p>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-[1fr_1fr_auto]">
+                <div>
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Trace A — baseline
+                  </label>
+                  <select
+                    value={compareTraceA}
+                    onChange={(event) => setCompareTraceA(event.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-200 outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {history.map((item) => (
+                      <option key={`A-${item.trace_id}`} value={item.trace_id}>
+                        {formatLocalTime(item.started_at)} · {item.application_name ?? "—"} · {item.resilience} · {item.trace_id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Trace B — comparaison
+                  </label>
+                  <select
+                    value={compareTraceB}
+                    onChange={(event) => setCompareTraceB(event.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-slate-200 outline-none focus:border-cyan-500"
+                  >
+                    <option value="">Sélectionner...</option>
+                    {history.map((item) => (
+                      <option key={`B-${item.trace_id}`} value={item.trace_id}>
+                        {formatLocalTime(item.started_at)} · {item.application_name ?? "—"} · {item.resilience} · {item.trace_id.slice(0, 8)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => void loadComparison()}
+                    disabled={compareLoading || !compareTraceA || !compareTraceB}
+                    className="w-full rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 xl:w-auto"
+                  >
+                    {compareLoading ? "Comparaison..." : "Comparer"}
+                  </button>
+                </div>
+              </div>
+
+              {compareError && (
+                <div className="mt-4 rounded-xl border border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                  {compareError}
+                </div>
+              )}
+            </div>
+
+            {compareMetricsA && compareMetricsB ? (
+              <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
+                <div className="border-b border-slate-800 px-5 py-4">
+                  <h2 className="font-semibold">COMPARISON MATRIX</h2>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Les couleurs de delta indiquent uniquement l’efficience sur les
+                    métriques temps/coût/erreurs. Elles ne mesurent pas la qualité
+                    de réponse — celle-ci sera ajoutée avec les évaluations.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-left text-sm">
+                    <thead className="bg-slate-950/70 text-slate-400">
+                      <tr>
+                        <th className="px-5 py-4">Metric</th>
+                        <th className="px-5 py-4">
+                          Trace A
+                          <div className="mt-1 font-mono text-xs text-violet-300">
+                            {compareMetricsA.traceId.slice(0, 8)}
+                          </div>
+                        </th>
+                        <th className="px-5 py-4">
+                          Trace B
+                          <div className="mt-1 font-mono text-xs text-cyan-300">
+                            {compareMetricsB.traceId.slice(0, 8)}
+                          </div>
+                        </th>
+                        <th className="px-5 py-4 text-right">Delta B vs A</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <CompareRow index={0} label="Date" a={formatLocalTime(compareMetricsA.date)} b={formatLocalTime(compareMetricsB.date)} />
+                      <CompareRow index={1} label="Application" a={compareMetricsA.application} b={compareMetricsB.application} />
+                      <CompareRow index={2} label="Status" a={compareMetricsA.status} b={compareMetricsB.status} />
+                      <CompareRow index={3} label="Resilience" a={compareMetricsA.resilience} b={compareMetricsB.resilience} />
+                      <CompareRow index={4} label="Configured model" a={compareMetricsA.configuredModel} b={compareMetricsB.configuredModel} />
+                      <CompareRow index={5} label="Execution mode" a={compareMetricsA.executionMode} b={compareMetricsB.executionMode} />
+
+                      <CompareNumericRow
+                        index={6}
+                        label="Total duration"
+                        a={compareMetricsA.totalMs}
+                        b={compareMetricsB.totalMs}
+                        format={formatDuration}
+                      />
+                      <CompareNumericRow
+                        index={7}
+                        label="MCP time"
+                        a={compareMetricsA.mcpMs}
+                        b={compareMetricsB.mcpMs}
+                        format={formatDuration}
+                      />
+                      <CompareNumericRow
+                        index={8}
+                        label="LLM time"
+                        a={compareMetricsA.llmMs}
+                        b={compareMetricsB.llmMs}
+                        format={formatDuration}
+                      />
+                      <CompareNumericRow
+                        index={9}
+                        label="Unattributed"
+                        a={compareMetricsA.unattributedMs}
+                        b={compareMetricsB.unattributedMs}
+                        format={formatDuration}
+                      />
+                      <CompareNumericRow
+                        index={10}
+                        label="Input tokens"
+                        a={compareMetricsA.inputTokens}
+                        b={compareMetricsB.inputTokens}
+                        format={(value) => value.toLocaleString("fr-FR")}
+                        deltaMode="neutral"
+                      />
+                      <CompareNumericRow
+                        index={11}
+                        label="Output tokens"
+                        a={compareMetricsA.outputTokens}
+                        b={compareMetricsB.outputTokens}
+                        format={(value) => value.toLocaleString("fr-FR")}
+                        deltaMode="neutral"
+                      />
+                      <CompareNumericRow
+                        index={12}
+                        label="Total tokens"
+                        a={compareMetricsA.totalTokens}
+                        b={compareMetricsB.totalTokens}
+                        format={(value) => value.toLocaleString("fr-FR")}
+                        deltaMode="neutral"
+                      />
+                      <CompareNumericRow
+                        index={13}
+                        label="Estimated cost"
+                        a={compareMetricsA.costUsd}
+                        b={compareMetricsB.costUsd}
+                        format={(value) => `$${value.toFixed(6)}`}
+                      />
+                      <CompareNumericRow
+                        index={14}
+                        label="Errors"
+                        a={compareMetricsA.errorCount}
+                        b={compareMetricsB.errorCount}
+                        format={(value) => String(value)}
+                      />
+                      <CompareRow
+                        index={15}
+                        label="Trace ID"
+                        a={compareMetricsA.traceId}
+                        b={compareMetricsB.traceId}
+                        mono
+                      />
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="border-t border-slate-800 px-5 py-4 text-xs text-slate-500">
+                  Delta = (B − A) / A. « n/a » apparaît lorsque la baseline A vaut zéro.
+                  Aucun score qualité n’est déduit de cette comparaison.
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 px-5 py-12 text-center text-sm text-slate-500">
+                Sélectionne deux traces puis clique sur Comparer.
+              </div>
+            )}
+          </section>
+        ) : (
+          <>
 
         <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
           <div className="grid gap-4 lg:grid-cols-[1fr_260px_auto]">
@@ -551,8 +1262,7 @@ export default function Home() {
                 onClick={startInvestigation}
                 disabled={
                   status === "RUNNING" ||
-                  prompt.trim().length < 3 ||
-                  mcpStatus?.mcp !== "healthy"
+                  prompt.trim().length < 3
                 }
                 className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
               >
@@ -715,8 +1425,24 @@ export default function Home() {
           />
           <MetricCard
             label="Errors"
-            value={String(spans.filter((span) => span.status === "ERROR").length)}
+            value={String(
+              spans.filter((span) => span.status === "ERROR").length +
+                events.filter((event) => event.event_type === "run_error").length
+            )}
             detail={`${spans.length} spans`}
+          />
+          <MetricCard
+            label="Resilience"
+            value={
+              status === "ERROR"
+                ? "FAILED"
+                : degraded
+                  ? "FALLBACK"
+                  : events.some((event) => event.event_type === "mcp_retry_scheduled")
+                    ? "RETRY"
+                    : "OK"
+            }
+            detail={`${events.filter((event) => event.event_type === "mcp_retry_scheduled").length} retries`}
           />
           <MetricCard label="Judge Score" value="—" detail="Module 3" />
         </section>
@@ -779,6 +1505,8 @@ export default function Home() {
             </pre>
           </section>
         )}
+          </>
+        )}
       </div>
     </main>
   );
@@ -799,6 +1527,74 @@ function MetricCard({
       <div className="mt-2 text-2xl font-semibold">{value}</div>
       <div className="mt-1 text-xs text-slate-400">{detail}</div>
     </div>
+  );
+}
+
+function CompareRow({
+  index,
+  label,
+  a,
+  b,
+  mono = false,
+}: {
+  index: number;
+  label: string;
+  a: string;
+  b: string;
+  mono?: boolean;
+}) {
+  return (
+    <tr
+      className={`border-t border-slate-800 ${
+        index % 2 === 1 ? "bg-slate-950/30" : ""
+      }`}
+    >
+      <td className="px-5 py-3 font-medium text-slate-300">{label}</td>
+      <td className={`px-5 py-3 text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>
+        {a}
+      </td>
+      <td className={`px-5 py-3 text-slate-200 ${mono ? "font-mono text-xs" : ""}`}>
+        {b}
+      </td>
+      <td className="px-5 py-3 text-right text-slate-600">—</td>
+    </tr>
+  );
+}
+
+function CompareNumericRow({
+  index,
+  label,
+  a,
+  b,
+  format,
+  deltaMode = "lower-is-better",
+}: {
+  index: number;
+  label: string;
+  a: number;
+  b: number;
+  format: (value: number) => string;
+  deltaMode?: "lower-is-better" | "neutral";
+}) {
+  return (
+    <tr
+      className={`border-t border-slate-800 ${
+        index % 2 === 1 ? "bg-slate-950/30" : ""
+      }`}
+    >
+      <td className="px-5 py-3 font-medium text-slate-300">{label}</td>
+      <td className="px-5 py-3 font-mono text-slate-200">{format(a)}</td>
+      <td className="px-5 py-3 font-mono text-slate-200">{format(b)}</td>
+      <td
+        className={`px-5 py-3 text-right font-mono font-semibold ${deltaClass(
+          a,
+          b,
+          deltaMode
+        )}`}
+      >
+        {formatDelta(a, b)}
+      </td>
+    </tr>
   );
 }
 

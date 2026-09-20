@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 from uuid import UUID
 
-from mcp import Client
-
 from apps.api.app.agents.ai_ops_graph import RunMetrics, ai_ops_graph
 from apps.api.app.config import settings
+from apps.api.app.mcp.client import (
+    connect_mcp_resilient,
+    mcp_circuit_breaker,
+)
 from apps.api.app.observability.live_stream import live_event_broker
 from apps.api.app.observability.telemetry import TelemetryRecorder
 
@@ -40,19 +43,74 @@ async def run_investigation(
     final_state: dict[str, Any] = {}
 
     try:
-        async with Client(settings.mcp_url) as mcp_client:
-            protocol_version = str(mcp_client.protocol_version)
+        connect_span = recorder.start_span(
+            trace.trace_id,
+            "mcp:connect",
+            "MCP",
+            input_data={"endpoint": settings.mcp_url},
+            metadata={"phase": "connection"},
+        )
+        connect_started = perf_counter()
 
+        def on_connect_retry(payload: dict[str, Any]) -> None:
             recorder.record_event(
                 trace.trace_id,
-                "mcp_connected",
-                {
-                    "endpoint": settings.mcp_url,
-                    "protocol_version": protocol_version,
-                    "server_info": str(mcp_client.server_info),
-                },
+                "mcp_retry_scheduled",
+                payload,
+                span_id=connect_span.span_id,
             )
 
+        def on_circuit_open(payload: dict[str, Any]) -> None:
+            recorder.record_event(
+                trace.trace_id,
+                "mcp_circuit_opened",
+                payload,
+                span_id=connect_span.span_id,
+            )
+
+        try:
+            connection = await connect_mcp_resilient(
+                settings.mcp_url,
+                on_retry=on_connect_retry,
+                on_circuit_open=on_circuit_open,
+            )
+        except Exception as exc:
+            connect_ms = round((perf_counter() - connect_started) * 1000)
+            metrics.mcp_duration_ms += connect_ms
+            recorder.finish_span(connect_span, status="ERROR", error=exc)
+            raise
+
+        connect_ms = round((perf_counter() - connect_started) * 1000)
+        metrics.mcp_duration_ms += connect_ms
+        mcp_client = connection.client
+        protocol_version = str(mcp_client.protocol_version)
+
+        recorder.finish_span(
+            connect_span,
+            output_data={
+                "endpoint": settings.mcp_url,
+                "protocol_version": protocol_version,
+                "attempts": connection.attempts,
+                "duration_ms": connect_ms,
+                "circuit_state": mcp_circuit_breaker.state,
+            },
+        )
+
+        recorder.record_event(
+            trace.trace_id,
+            "mcp_connected",
+            {
+                "endpoint": settings.mcp_url,
+                "protocol_version": protocol_version,
+                "server_info": str(mcp_client.server_info),
+                "attempts": connection.attempts,
+                "duration_ms": connect_ms,
+                "circuit_state": mcp_circuit_breaker.state,
+            },
+            span_id=connect_span.span_id,
+        )
+
+        try:
             final_state = await ai_ops_graph.ainvoke(
                 {
                     "prompt": prompt,
@@ -67,6 +125,8 @@ async def run_investigation(
                     "mcp_protocol_version": protocol_version,
                 },
             )
+        finally:
+            await connection.close()
 
         summary = {
             **final_state.get("summary", {}),
@@ -82,6 +142,18 @@ async def run_investigation(
         )
 
     except Exception as exc:
+        recorder.record_event(
+            trace.trace_id,
+            "run_error",
+            {
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+                "orchestrator": "LangGraph",
+                "tool_interface": "MCP",
+                "circuit_state": mcp_circuit_breaker.state,
+            },
+        )
+
         total_ms = recorder.finish_trace(
             trace,
             status="ERROR",
@@ -89,9 +161,7 @@ async def run_investigation(
         )
 
         unattributed_ms = max(
-            total_ms
-            - metrics.mcp_duration_ms
-            - metrics.llm_duration_ms,
+            total_ms - metrics.mcp_duration_ms - metrics.llm_duration_ms,
             0,
         )
 
@@ -118,23 +188,6 @@ async def run_investigation(
             },
         )
 
-        live_event_broker.publish(
-            run_id,
-            {
-                "trace_id": str(trace.trace_id),
-                "span_id": None,
-                "event_type": "run_error",
-                "occurred_at": None,
-                "sequence_no": None,
-                "event_data": {
-                    "error_type": type(exc).__name__,
-                    "error_message": str(exc),
-                    "orchestrator": "LangGraph",
-                    "tool_interface": "MCP",
-                },
-            },
-        )
-
     else:
         llm_usage = final_state.get("llm_usage", {})
 
@@ -147,9 +200,7 @@ async def run_investigation(
         )
 
         unattributed_ms = max(
-            total_ms
-            - metrics.mcp_duration_ms
-            - metrics.llm_duration_ms,
+            total_ms - metrics.mcp_duration_ms - metrics.llm_duration_ms,
             0,
         )
 

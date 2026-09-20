@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time
 import os
+from datetime import date, datetime, time
 from typing import Any
 from uuid import UUID
 
@@ -11,10 +11,20 @@ from mcp.server import MCPServer
 
 from apps.api.app.tools.ops_tools import (
     check_dependencies as check_dependencies_local,
+)
+from apps.api.app.tools.ops_tools import (
     get_application as get_application_local,
+)
+from apps.api.app.tools.ops_tools import (
     get_incident as get_incident_local,
+)
+from apps.api.app.tools.ops_tools import (
     get_jira_ticket as get_jira_ticket_local,
+)
+from apps.api.app.tools.ops_tools import (
     get_reload_history as get_reload_history_local,
+)
+from apps.api.app.tools.ops_tools import (
     get_reload_logs as get_reload_logs_local,
 )
 
@@ -125,9 +135,7 @@ def main() -> None:
         return
 
     if transport != "streamable-http":
-        raise ValueError(
-            "MCP_TRANSPORT must be 'streamable-http' or 'stdio'."
-        )
+        raise ValueError("MCP_TRANSPORT must be 'streamable-http' or 'stdio'.")
 
     host = os.getenv("MCP_HOST", "127.0.0.1")
     port = int(os.getenv("MCP_PORT", "8001"))

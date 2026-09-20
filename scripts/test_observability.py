@@ -61,9 +61,7 @@ def main() -> None:
 
     recorder = TelemetryRecorder(
         event_callback=lambda event: print(
-            f"[EVENT {event['sequence_no']:02d}] "
-            f"{event['event_type']:<14} "
-            f"{event['event_data']}"
+            f"[EVENT {event['sequence_no']:02d}] {event['event_type']:<14} {event['event_data']}"
         )
     )
 
@@ -163,9 +161,10 @@ def main() -> None:
         total_ms = recorder.finish_trace(trace, status="SUCCESS")
 
     with engine.connect() as connection:
-        trace_row = connection.execute(
-            text(
-                """
+        trace_row = (
+            connection.execute(
+                text(
+                    """
                 SELECT
                     trace_id,
                     prompt,
@@ -179,13 +178,17 @@ def main() -> None:
                 FROM observability.traces
                 WHERE trace_id = :trace_id;
                 """
-            ),
-            {"trace_id": trace.trace_id},
-        ).mappings().one()
+                ),
+                {"trace_id": trace.trace_id},
+            )
+            .mappings()
+            .one()
+        )
 
-        span_rows = connection.execute(
-            text(
-                """
+        span_rows = (
+            connection.execute(
+                text(
+                    """
                 SELECT
                     sequence_no,
                     span_type,
@@ -196,9 +199,12 @@ def main() -> None:
                 WHERE trace_id = :trace_id
                 ORDER BY sequence_no;
                 """
-            ),
-            {"trace_id": trace.trace_id},
-        ).mappings().all()
+                ),
+                {"trace_id": trace.trace_id},
+            )
+            .mappings()
+            .all()
+        )
 
         event_count = connection.execute(
             text(

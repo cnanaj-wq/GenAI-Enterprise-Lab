@@ -10,16 +10,12 @@ import sys
 
 import httpx
 
-
 BASE_URL = "http://127.0.0.1:8000"
 
 
 def main() -> None:
     payload = {
-        "prompt": (
-            "Pourquoi Sales_Analytics_033 a échoué "
-            "lors de son dernier reload ?"
-        ),
+        "prompt": ("Pourquoi Sales_Analytics_033 a échoué lors de son dernier reload ?"),
         "application_name": "Sales_Analytics_033",
     }
 
@@ -77,13 +73,8 @@ def main() -> None:
                 else:
                     name = data.get("name", "")
                     duration = data.get("duration_ms")
-                    duration_text = (
-                        f"{duration} ms" if duration is not None else ""
-                    )
-                    print(
-                        f"{occurred_at}  {event_name:<22} "
-                        f"{name:<24} {duration_text}"
-                    )
+                    duration_text = f"{duration} ms" if duration is not None else ""
+                    print(f"{occurred_at}  {event_name:<22} {name:<24} {duration_text}")
 
     state = httpx.get(
         f"{BASE_URL}/api/v1/investigations/{run_id}",

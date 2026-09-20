@@ -5,13 +5,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from .database import engine
+from .routes.finops import router as finops_router
 from .routes.investigations import router as investigations_router
 from .routes.mcp_gateway import router as mcp_router
-
+from .routes.optimize import router as optimize_router
+from .routes.project_health import router as project_health_router
 
 app = FastAPI(
     title="GenAI Enterprise Lab API",
-    version="0.3.0",
+    version="0.6.0",
 )
 
 app.add_middleware(
@@ -27,13 +29,16 @@ app.add_middleware(
 
 app.include_router(investigations_router)
 app.include_router(mcp_router)
+app.include_router(project_health_router)
+app.include_router(optimize_router)
+app.include_router(finops_router)
 
 
 @app.get("/")
 def root():
     return {
         "name": "GenAI Enterprise Lab API",
-        "version": "0.3.0",
+        "version": "0.6.0",
     }
 
 

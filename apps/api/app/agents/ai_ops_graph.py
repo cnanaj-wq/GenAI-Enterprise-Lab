@@ -14,9 +14,14 @@ from mcp import Client
 from sqlalchemy import text
 from typing_extensions import NotRequired, TypedDict
 
+from apps.api.app.config import settings
 from apps.api.app.database import engine
 from apps.api.app.llm.openai_provider import generate_diagnosis
-from apps.api.app.mcp.client import call_mcp_tool
+from apps.api.app.mcp.client import (
+    MCPCircuitOpenError,
+    call_mcp_tool_resilient,
+    mcp_circuit_breaker,
+)
 from apps.api.app.observability.telemetry import SpanHandle, TelemetryRecorder
 
 
@@ -119,12 +124,43 @@ async def _execute_mcp_tool(
 
     started = perf_counter()
 
+    def on_retry(payload: dict[str, Any]) -> None:
+        recorder.record_event(
+            trace_id,
+            "mcp_retry_scheduled",
+            payload,
+            span_id=mcp_span.span_id,
+        )
+
     try:
-        result = await call_mcp_tool(
+        call = await call_mcp_tool_resilient(
             runtime.context["mcp_client"],
             name,
             arguments,
+            on_retry=on_retry,
         )
+        result = call.value
+        attempts = call.attempts
+    except MCPCircuitOpenError as exc:
+        duration_ms = round((perf_counter() - started) * 1000)
+        _metrics(runtime).mcp_duration_ms += duration_ms
+
+        recorder.record_event(
+            trace_id,
+            "mcp_circuit_opened",
+            {
+                "tool": name,
+                "circuit_state": mcp_circuit_breaker.state,
+                "consecutive_failures": mcp_circuit_breaker.consecutive_failures,
+                "cooldown_seconds": settings.mcp_circuit_cooldown_seconds,
+                "error_message": str(exc),
+            },
+            span_id=mcp_span.span_id,
+        )
+
+        recorder.finish_span(mcp_span, status="ERROR", error=exc)
+        raise
+
     except Exception as exc:
         duration_ms = round((perf_counter() - started) * 1000)
         _metrics(runtime).mcp_duration_ms += duration_ms
@@ -138,6 +174,7 @@ async def _execute_mcp_tool(
                 "protocol_version": runtime.context["mcp_protocol_version"],
                 "duration_ms": duration_ms,
                 "status": "ERROR",
+                "circuit_state": mcp_circuit_breaker.state,
             },
             span_id=mcp_span.span_id,
         )
@@ -157,6 +194,8 @@ async def _execute_mcp_tool(
         output_data={
             "tool_result": stored_result,
             "mcp_round_trip_ms": duration_ms,
+            "attempts": attempts,
+            "circuit_state": mcp_circuit_breaker.state,
         },
     )
 
@@ -168,7 +207,9 @@ async def _execute_mcp_tool(
             "endpoint": runtime.context["mcp_endpoint"],
             "protocol_version": runtime.context["mcp_protocol_version"],
             "duration_ms": duration_ms,
+            "attempts": attempts,
             "status": "SUCCESS",
+            "circuit_state": mcp_circuit_breaker.state,
         },
         span_id=mcp_span.span_id,
     )
@@ -207,9 +248,7 @@ def _discover_failed_reload(
 
     if row is None:
         if application_name:
-            raise RuntimeError(
-                f"No FAILED reload found for application {application_name!r}."
-            )
+            raise RuntimeError(f"No FAILED reload found for application {application_name!r}.")
         raise RuntimeError("No FAILED reload found in the dataset.")
 
     return dict(row)
@@ -339,8 +378,7 @@ async def inspect_reload_logs(
         root_error_codes = [
             row["error_code"]
             for row in logs
-            if row.get("error_code")
-            and row["error_code"] != "RELOAD_ABORTED"
+            if row.get("error_code") and row["error_code"] != "RELOAD_ABORTED"
         ]
 
         return {
@@ -490,8 +528,7 @@ def _llm_evidence(state: InvestigatorState) -> dict[str, Any]:
             "data_source_id": row["data_source_id"],
         }
         for row in state.get("reload_logs", [])
-        if row["level"] in {"WARN", "ERROR", "CRITICAL"}
-        or row.get("error_code")
+        if row["level"] in {"WARN", "ERROR", "CRITICAL"} or row.get("error_code")
     ]
 
     return {
@@ -504,6 +541,49 @@ def _llm_evidence(state: InvestigatorState) -> dict[str, Any]:
         "dependencies": state.get("dependencies", []),
         "deterministic_summary": state.get("summary"),
     }
+
+
+def _deterministic_fallback_diagnosis(state: InvestigatorState) -> str:
+    """Generate a bounded diagnosis when the LLM is unavailable."""
+    errors = state.get("root_error_codes", [])
+    incident = state.get("incident")
+    jira = state.get("jira_ticket")
+    application = state.get("application", {})
+    candidate = state.get("candidate", {})
+
+    primary_error = errors[0] if errors else "CAUSE_NON_DETERMINEE"
+
+    incident_text = (
+        f"Incident {incident.get('incident_id')} — "
+        f"{incident.get('root_cause', 'cause documentée indisponible')}"
+        if incident
+        else "Aucun incident lié n'a été trouvé."
+    )
+
+    jira_text = (
+        f"Ticket {jira.get('jira_key')} ({jira.get('status', 'statut inconnu')})."
+        if jira
+        else "Aucun ticket Jira lié n'a été trouvé."
+    )
+
+    return (
+        "1. Diagnostic\\n"
+        f"Mode dégradé déterministe : le reload "
+        f"{candidate.get('reload_id', 'inconnu')} de "
+        f"{application.get('application_name', 'l’application')} a échoué. "
+        f"Erreur principale observée : {primary_error}.\\n\\n"
+        "2. Preuves\\n"
+        f"- Codes d'erreur : {', '.join(errors) if errors else 'aucun code spécifique'}\\n"
+        f"- {incident_text}\\n"
+        f"- {jira_text}\\n\\n"
+        "3. Impact\\n"
+        "Le diagnostic est limité aux preuves structurées collectées par les tools.\\n\\n"
+        "4. Action corrective\\n"
+        "Traiter la cause documentée dans les logs/incident, puis relancer le reload "
+        "et vérifier son statut.\\n\\n"
+        "5. Confiance\\n"
+        "Moyenne — réponse de secours générée sans LLM."
+    )
 
 
 async def generate_llm_diagnosis(
@@ -542,7 +622,46 @@ async def generate_llm_diagnosis(
             duration_ms = round((perf_counter() - started) * 1000)
             _metrics(runtime).llm_duration_ms += duration_ms
             recorder.finish_span(llm_span, status="ERROR", error=exc)
-            raise
+
+            fallback = _deterministic_fallback_diagnosis(state)
+            fallback_usage = {
+                "provider": "fallback",
+                "model": "deterministic",
+                "response_id": None,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "total_tokens": 0,
+                "estimated_cost_usd": 0.0,
+                "duration_ms": duration_ms,
+                "fallback": True,
+            }
+
+            recorder.record_event(
+                trace_id,
+                "fallback_used",
+                {
+                    "component": "llm",
+                    "reason": type(exc).__name__,
+                    "error_message": str(exc),
+                    "strategy": "deterministic_diagnosis",
+                },
+                span_id=llm_span.span_id,
+            )
+
+            recorder.record_event(
+                trace_id,
+                "diagnosis_ready",
+                {
+                    "diagnosis": fallback,
+                    **fallback_usage,
+                },
+                span_id=llm_span.span_id,
+            )
+
+            return {
+                "diagnosis": fallback,
+                "llm_usage": fallback_usage,
+            }
 
         duration_ms = round((perf_counter() - started) * 1000)
         _metrics(runtime).llm_duration_ms += duration_ms

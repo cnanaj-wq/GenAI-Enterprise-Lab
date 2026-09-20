@@ -11,7 +11,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from mcp import Client
 
-
 MCP_URL = "http://127.0.0.1:8001/mcp"
 
 router = APIRouter(
@@ -80,9 +79,7 @@ async def get_mcp_tools() -> dict[str, Any]:
                         "name": tool.name,
                         "description": tool.description,
                         "input_schema": _jsonable(tool.input_schema),
-                        "output_schema": _jsonable(
-                            getattr(tool, "output_schema", None)
-                        ),
+                        "output_schema": _jsonable(getattr(tool, "output_schema", None)),
                     }
                 )
 

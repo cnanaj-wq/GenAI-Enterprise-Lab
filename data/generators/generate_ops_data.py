@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import random
 import sys
@@ -38,7 +37,6 @@ from typing import Iterable, Sequence
 
 import psycopg
 from dotenv import load_dotenv
-
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG = ROOT / "data" / "generators" / "module1_profiles.json"
@@ -140,9 +138,7 @@ GENERIC_LOG_MESSAGES = [
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Generate synthetic operations data for Module 1."
-    )
+    parser = argparse.ArgumentParser(description="Generate synthetic operations data for Module 1.")
     parser.add_argument(
         "--profile",
         required=True,
@@ -184,9 +180,7 @@ def load_database_settings() -> dict:
     required = ["POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"]
     missing = [key for key in required if not os.getenv(key)]
     if missing:
-        raise RuntimeError(
-            f"Missing database environment variables: {', '.join(missing)}"
-        )
+        raise RuntimeError(f"Missing database environment variables: {', '.join(missing)}")
 
     return {
         "dbname": os.environ["POSTGRES_DB"],
@@ -587,12 +581,8 @@ def log_rows_for_job(
 ) -> Iterable[tuple]:
     rng = deterministic_rng(seed, reload_id, 200)
     app_sources = deps.get(app_id) or []
-    data_source_id = (
-        app_sources[(reload_id * 13) % len(app_sources)] if app_sources else None
-    )
-    correlation_id = uuid.UUID(
-        int=((reload_id << 64) ^ (seed * 1_000_003)) % (1 << 128)
-    )
+    data_source_id = app_sources[(reload_id * 13) % len(app_sources)] if app_sources else None
+    correlation_id = uuid.UUID(int=((reload_id << 64) ^ (seed * 1_000_003)) % (1 << 128))
 
     duration_seconds = max(int((ended_at - started_at).total_seconds()), 1)
     root_cause = root_cause_for_reload(reload_id, seed, rules)
@@ -878,9 +868,7 @@ def generate_incidents(
             app_id = ((incident_id * 17) % app_count) + 1
             opened_at = random_timestamp(rng, start, end)
             root_cause = weighted_choice(rng, rules["root_cause_distribution"])
-            description = (
-                f"Operational degradation detected for application {app_id}."
-            )
+            description = f"Operational degradation detected for application {app_id}."
 
         severity = rng.choices(
             ["SEV1", "SEV2", "SEV3", "SEV4"],
@@ -889,11 +877,7 @@ def generate_incidents(
         )[0]
         resolved = rng.random() < 0.86
         status = "CLOSED" if resolved else rng.choice(["OPEN", "INVESTIGATING"])
-        closed_at = (
-            opened_at + timedelta(minutes=rng.randint(20, 24 * 60))
-            if resolved
-            else None
-        )
+        closed_at = opened_at + timedelta(minutes=rng.randint(20, 24 * 60)) if resolved else None
 
         _, root_detail = ROOT_CAUSE_MESSAGES[root_cause]
 
@@ -1009,7 +993,9 @@ def print_target(profile_name: str, profile: dict) -> None:
     ]:
         print(f"{key:<28} {profile[key]:>15,}")
     print("=" * 58)
-    print(f"{'total rows':<28} {sum(profile[k] for k in profile if isinstance(profile[k], int) and k != 'seed'):>15,}")
+    print(
+        f"{'total rows':<28} {sum(profile[k] for k in profile if isinstance(profile[k], int) and k != 'seed'):>15,}"
+    )
 
 
 def main() -> int:
@@ -1030,8 +1016,7 @@ def main() -> int:
         if ops_has_data(conn):
             if not args.reset:
                 raise RuntimeError(
-                    "The ops schema already contains data. "
-                    "Re-run with --reset to replace it."
+                    "The ops schema already contains data. Re-run with --reset to replace it."
                 )
             reset_ops(conn)
 

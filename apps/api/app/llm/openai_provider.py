@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from openai import OpenAI
 
 from apps.api.app.config import settings
-
 
 # Current STEP 1.6 pricing table in USD per 1M tokens.
 # Keep pricing explicit and version-controlled so cost calculations are auditable.
@@ -65,8 +64,7 @@ def _estimate_cost_usd(
 
     input_rate, output_rate = pricing
     return round(
-        (input_tokens / 1_000_000) * input_rate
-        + (output_tokens / 1_000_000) * output_rate,
+        (input_tokens / 1_000_000) * input_rate + (output_tokens / 1_000_000) * output_rate,
         8,
     )
 
@@ -78,13 +76,12 @@ def generate_diagnosis(
 ) -> LLMResult:
     """Generate a grounded diagnosis from structured operational evidence."""
     if not settings.openai_api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is missing. Add it to the project .env file."
-        )
+        raise RuntimeError("OPENAI_API_KEY is missing. Add it to the project .env file.")
 
     client = OpenAI(
         api_key=settings.openai_api_key,
-        timeout=45.0,
+        timeout=settings.openai_timeout_seconds,
+        max_retries=settings.openai_max_retries,
     )
 
     model = settings.openai_model

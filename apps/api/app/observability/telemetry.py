@@ -2,18 +2,16 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from time import perf_counter
-from typing import Any, Callable, Iterator
+from typing import Any, Callable
 from uuid import UUID, uuid4
 
 from sqlalchemy import text
 
 from apps.api.app.database import engine
-
 
 EventCallback = Callable[[dict[str, Any]], None]
 
@@ -230,9 +228,7 @@ class TelemetryRecorder:
 
         span_type = span_type.upper()
         if span_type not in self.VALID_SPAN_TYPES:
-            raise ValueError(
-                f"span_type must be one of {sorted(self.VALID_SPAN_TYPES)}"
-            )
+            raise ValueError(f"span_type must be one of {sorted(self.VALID_SPAN_TYPES)}")
 
         span_id = uuid4()
         sequence_no = self._next_span_sequence(trace_id)

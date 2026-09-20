@@ -12,7 +12,6 @@ from sqlalchemy import text
 
 from apps.api.app.database import engine
 
-
 VALID_RELOAD_STATUSES = {
     "RUNNING",
     "SUCCESS",
@@ -80,9 +79,7 @@ def get_reload_history(
     if status is not None:
         status = status.upper()
         if status not in VALID_RELOAD_STATUSES:
-            raise ValueError(
-                f"status must be one of {sorted(VALID_RELOAD_STATUSES)}"
-            )
+            raise ValueError(f"status must be one of {sorted(VALID_RELOAD_STATUSES)}")
 
     sql = """
         SELECT
@@ -131,9 +128,7 @@ def get_reload_logs(
     if level is not None:
         level = level.upper()
         if level not in VALID_LOG_LEVELS:
-            raise ValueError(
-                f"level must be one of {sorted(VALID_LOG_LEVELS)}"
-            )
+            raise ValueError(f"level must be one of {sorted(VALID_LOG_LEVELS)}")
 
     sql = """
         SELECT
