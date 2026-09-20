@@ -1,295 +1,457 @@
 # GenAI Enterprise Lab
 
-Production-oriented **GenAI Data Engineering** lab designed to build, evaluate and industrialize enterprise Generative AI applications.
+Production-oriented **GenAI Data Engineering** lab designed to build, test and industrialize enterprise Generative AI applications.
 
-The project progressively covers:
+The repository is structured as a learning-by-building roadmap:
 
-- Agentic AI
-- Retrieval-Augmented Generation (RAG)
-- LLM evaluation
-- PromptOps
-- MCP
-- AI observability
-- Enterprise Data / AI integration
+**learn → build → test → document → publish**
+
+The goal is not to accumulate notebooks or disconnected proofs of concept. Each module produces a working, testable product with architecture, source code, observability and CI.
 
 ---
 
-## Core Stack
+## Current status
 
-### Application & Backend
+| Module | Product | Status |
+|---|---|---|
+| Module 0 — Enterprise GenAI Technical Foundation | GenAI Enterprise Lab foundation | ✅ Complete |
+| Module 1 — Agentic AI & MCP | **AI Ops Investigator** | ✅ Complete |
+| Module 2 — Enterprise RAG | Enterprise Knowledge Copilot | 🔜 Next |
+| Module 3 — Evaluation / Observability / LLMOps | GenAI Production Quality Control Tower | Planned |
+| Module 4 — PromptOps / Guardrails | PromptOps Workbench | Planned |
+| Module 5 — End-to-End AI Data Analyst | AI Data Analyst Platform | Planned |
 
-- **Python** — Main backend and AI engineering language. Used for API services, data processing, synthetic data generation, agent orchestration, RAG pipelines and evaluation workflows.
-- **FastAPI** — High-performance API framework used to expose the GenAI platform services, health endpoints, agents, RAG pipelines and future AI capabilities.
-- **Pydantic** — Provides strongly typed data validation, configuration management and structured outputs through explicit schemas.
-
-### Frontend
-
-- **TypeScript** — Adds static typing to the application layer and improves reliability when building frontend components, API contracts and AI interfaces.
-- **Next.js** — React-based framework used to build the GenAI Enterprise Lab interface, dashboards and server-side integrations with FastAPI.
-
-### Generative AI & Agentic Systems
-
-- **OpenAI / Anthropic** — LLM providers used for reasoning, structured generation, tool calling and agentic workflows.
-- **LangGraph** — Framework used to build stateful AI agents and controlled workflows with routing, tool execution, retries and human-in-the-loop capabilities.
-- **MCP — Model Context Protocol** — Standard protocol used to expose enterprise tools, APIs and data sources to AI agents through a consistent interface.
-
-### Data & RAG
-
-- **PostgreSQL** — Primary relational database used to store structured business data, application data and large synthetic datasets for realistic enterprise scenarios.
-- **pgvector** — PostgreSQL extension used to store embeddings and perform vector similarity searches for Retrieval-Augmented Generation.
-
-### Infrastructure & DevOps
-
-- **Docker** — Provides reproducible infrastructure and isolated services. PostgreSQL and pgvector currently run inside Docker containers.
-- **GitHub Actions** — CI/CD automation used to validate the project through linting, automated tests and production builds.
-
-### AI Observability
-
-- **Langfuse** — LLM observability platform used to trace prompts, model calls, agents, latency, token usage, cost and evaluation results.
-- **OpenTelemetry** — Vendor-neutral observability standard used to collect distributed traces, metrics and logs across the application.
+Module 1 has passed both the **local quality gate** and a **real GitHub Actions CI run** on the `module-1-agentic-ai` branch.
 
 ---
 
-## Current Architecture
+# Module 1 — AI Ops Investigator
+
+The AI Ops Investigator answers a concrete operational question such as:
+
+> Why did `Sales_Analytics_033` fail during its last reload?
+
+Instead of asking an LLM to guess, the system follows a controlled investigation workflow:
+
+1. identify the failed reload;
+2. load the application;
+3. inspect reload history;
+4. inspect logs;
+5. search for the linked incident;
+6. retrieve the Jira ticket when available;
+7. inspect dependencies;
+8. build a structured evidence summary;
+9. ask the LLM to produce the diagnosis;
+10. fall back to a deterministic diagnosis if the LLM is unavailable.
+
+The system also exposes history, replay, trace comparison, GenAI FinOps, project health and deterministic optimization recommendations.
+
+---
+
+## Module 1 architecture
+
+```mermaid
+flowchart LR
+    U[Browser] --> W[Next.js cockpit]
+    W --> A[FastAPI]
+    A --> G[LangGraph]
+    G --> C[MCP Client]
+    C --> M[MCP Server]
+    M --> T[6 read-only enterprise tools]
+    T --> P[(PostgreSQL 18)]
+
+    G --> L[OpenAI Responses API]
+
+    A --> O[(Observability traces / spans / events)]
+    A --> F[(FinOps)]
+    A --> H[(Project Health / CI history)]
+
+    O --> W
+    F --> W
+    H --> W
+```
+
+Detailed diagrams and implementation notes are available in:
+
+- [`docs/module-1/README.md`](docs/module-1/README.md)
+- [`docs/module-1/ARCHITECTURE.md`](docs/module-1/ARCHITECTURE.md)
+- [`docs/module-1/RELEASE_NOTES.md`](docs/module-1/RELEASE_NOTES.md)
+
+---
+
+## Cockpit
+
+The Next.js cockpit contains six active views:
+
+- **LIVE** — real-time execution graph and SSE event stream;
+- **HISTORY** — persisted investigations;
+- **COMPARE** — trace-to-trace comparison;
+- **PROJECT HEALTH** — Git, runtime and CI/CD health;
+- **USAGE & COST** — GenAI FinOps analytics;
+- **OPTIMIZE** — deterministic optimization recommendations.
+
+### Live agent graph
+
+![Live agent graph](docs/module-1/screenshots/01-live-agent-graph.png)
+
+### GenAI FinOps
+
+![GenAI FinOps](docs/module-1/screenshots/04-finops.png)
+
+### Optimize
+
+![Optimize](docs/module-1/screenshots/05-optimize.png)
+
+---
+
+# Core stack
+
+## Application
+
+- **Python 3.12**
+- **FastAPI**
+- **Pydantic / Pydantic Settings**
+- **SQLAlchemy**
+- **psycopg**
+
+## Frontend
+
+- **TypeScript**
+- **Next.js 16**
+- **React**
+- **@xyflow/react**
+- **Server-Sent Events**
+
+## Agentic AI
+
+- **LangGraph**
+- **OpenAI Responses API**
+- **Model Context Protocol**
+- MCP client and MCP server
+- read-only enterprise tools
+
+## Data
+
+- **PostgreSQL 18**
+- **pgvector 0.8.6**
+- SQL migrations
+- synthetic enterprise-scale datasets
+
+## Reliability
+
+- request timeouts;
+- bounded retries;
+- exponential backoff;
+- circuit breaker;
+- deterministic LLM fallback;
+- fault injection and recovery tests.
+
+## Observability
+
+Implemented in Module 1:
+
+- trace;
+- span;
+- event;
+- NODE / MCP / DATABASE / LLM / EVALUATION / ERROR span types;
+- latency;
+- token usage;
+- estimated cost;
+- execution breakdown;
+- history and replay.
+
+**Langfuse and OpenTelemetry are planned for Module 3; they are not presented as implemented in Module 1.**
+
+## Quality and CI/CD
+
+- **Ruff**
+- **Pytest**
+- **ESLint**
+- **Next.js production build**
+- **GitHub Actions**
+- PostgreSQL + pgvector service container in CI
+
+The final local quality gate validates:
 
 ```text
-Browser
-   │
-   ▼
-Next.js / TypeScript
-   │
-   ▼
-FastAPI / Python
-   │
-   ▼
-SQLAlchemy / psycopg
-   │
-   ▼
-PostgreSQL 18
-   │
-   └── pgvector
+RUFF           PASS
+PYTEST         PASS
+ESLINT         PASS
+NEXTJS_BUILD   PASS
+```
+
+The remote GitHub Actions workflow then repeats the validation on a clean runner.
+
+![GitHub Actions success](docs/module-1/screenshots/06-github-actions-success.png)
+
+---
+
+# LangGraph workflow
+
+```mermaid
+flowchart TD
+    S([START]) --> SC[select_candidate]
+    SC --> APP[load_application]
+    APP --> RH[inspect_reload_history]
+    RH --> RL[inspect_reload_logs]
+    RL --> INC[lookup_incident]
+    INC --> J{Incident linked?}
+    J -- yes --> JIRA[lookup_jira]
+    J -- no --> DEP[inspect_dependencies]
+    JIRA --> DEP
+    DEP --> SUM[build_summary]
+    SUM --> LLM[generate_llm_diagnosis]
+    LLM --> E([END])
+```
+
+All enterprise data access is routed through MCP tools except the internal candidate-discovery lookup used by the orchestration layer.
+
+---
+
+# MCP tools
+
+The MCP server exposes six read-only tools:
+
+- `get_application`
+- `get_reload_history`
+- `get_reload_logs`
+- `get_incident`
+- `get_jira_ticket`
+- `check_dependencies`
+
+MCP is treated as the standard interface between the agent and enterprise capabilities.
+
+---
+
+# Resilience
+
+The project deliberately tests failure paths.
+
+### MCP unavailable
+
+```text
+MCP call
+   ↓
+timeout
+   ↓
+retry
+   ↓
+exponential backoff
+   ↓
+circuit breaker
+   ↓
+controlled failure / telemetry
+```
+
+### LLM unavailable
+
+The evidence-gathering workflow still completes. A deterministic fallback diagnosis is generated from structured facts already collected by the tools.
+
+This avoids turning provider downtime into an ungrounded answer.
+
+---
+
+# History, replay and compare
+
+**History** stores past investigations.
+
+**Replay** reconstructs a previous execution from persisted traces, spans and events. It does not call MCP or the LLM again and therefore does not burn new tokens.
+
+**Compare** allows two traces to be compared on:
+
+- total duration;
+- MCP duration;
+- LLM duration;
+- unattributed duration;
+- input/output/total tokens;
+- estimated cost;
+- execution mode;
+- error count.
+
+![Trace comparison](docs/module-1/screenshots/03-compare.png)
+
+---
+
+# GenAI FinOps
+
+The synthetic FinOps dataset models:
+
+- 300 users;
+- 12 teams;
+- 6 business units;
+- 5 use cases;
+- 3 model tiers;
+- 120 days of activity.
+
+The cockpit can analyze cost and usage by business unit, team, use case and model.
+
+Metrics include:
+
+- total cost;
+- input/output tokens;
+- requests;
+- active users;
+- cost/request;
+- tokens/request;
+- success rate;
+- retry rate;
+- average latency.
+
+---
+
+# Deterministic optimization
+
+`OPTIMIZE` converts measurable signals into an optimization backlog.
+
+```text
+Observation
+   ↓
+Diagnostic
+   ↓
+Recommendation
+   ↓
+Estimated impact
+```
+
+The first rule set covers:
+
+- context pressure;
+- premium model overuse;
+- retries;
+- latency;
+- success rate;
+- cost per request.
+
+No LLM is used for these recommendations and no change is applied automatically.
+
+---
+
+# CI/CD lesson learned
+
+The first remote Module 1 CI run failed even though the local quality gate was green.
+
+Root cause:
+
+- the local PostgreSQL database already had pgvector enabled;
+- the GitHub Actions runner started from a fresh database;
+- the Docker image contained pgvector, but the extension had not been activated in the database.
+
+The fix was to make this dependency explicit in a migration:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+The following CI runs passed.
+
+That failure is intentionally documented because it demonstrates the value of CI: a clean runner exposes hidden dependencies that a developer workstation can accidentally mask.
+
+![GitHub Actions history](docs/module-1/screenshots/07-github-actions-history.png)
+
+---
+
+# Run locally
+
+## 1. PostgreSQL
+
+```powershell
+docker start genai-postgres
+```
+
+## 2. MCP server
+
+```powershell
+$Host.UI.RawUI.WindowTitle = "MCP SERVER"
+
+cd C:\GenAI-Enterprise-Lab
+.\.venv\Scripts\Activate.ps1
+
+python -m apps.mcp.server
+```
+
+## 3. FastAPI
+
+```powershell
+$Host.UI.RawUI.WindowTitle = "FASTAPI SERVER"
+
+cd C:\GenAI-Enterprise-Lab
+.\.venv\Scripts\Activate.ps1
+
+python -m uvicorn apps.api.app.main:app --reload --port 8000
+```
+
+## 4. Next.js
+
+```powershell
+$Host.UI.RawUI.WindowTitle = "NEXT.JS FRONTEND"
+
+cd C:\GenAI-Enterprise-Lab\apps\web
+
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
 ```
 
 ---
 
-## Implementation Status
+# Quality gate
 
-| Component | Status |
-|---|---|
-| Python 3.12 | ✅ Implemented |
-| FastAPI | ✅ Implemented |
-| Pydantic | ✅ Implemented |
-| PostgreSQL 18 | ✅ Implemented |
-| pgvector | ✅ Implemented |
-| Docker | ✅ Implemented |
-| TypeScript | ✅ Implemented |
-| Next.js | ✅ Implemented |
-| Ruff | ✅ Implemented |
-| Pytest | ✅ Implemented |
-| Frontend production build | ✅ Implemented |
-| GitHub Actions | 🔜 Module 0 |
-| OpenAI / Anthropic | 🔜 Module 1 |
-| LangGraph | 🔜 Module 1 |
-| MCP | 🔜 Module 1 |
-| Langfuse | 🔜 Module 3 |
-| OpenTelemetry | 🔜 Module 3 |
+```powershell
+$Host.UI.RawUI.WindowTitle = "MODULE 1 QUALITY GATE"
+
+cd C:\GenAI-Enterprise-Lab
+.\.venv\Scripts\Activate.ps1
+
+python .\scripts\run_quality_gate.py
+```
 
 ---
 
-## Roadmap
+# Roadmap
 
-### Module 0 — Enterprise GenAI Technical Foundation
+## Module 2 — Enterprise RAG
 
-Build the production-oriented technical foundation that will support every future GenAI module.
+Next product: **Enterprise Knowledge Copilot**.
 
-**You will learn to:**
+Main topics:
 
-- Structure a professional monorepo for Python and TypeScript applications
-- Manage source code and incremental development with Git
-- Build isolated Python environments with `venv`
-- Create REST APIs with FastAPI
-- Validate configuration and data with Pydantic
-- Connect Python applications to PostgreSQL with SQLAlchemy and psycopg
-- Run PostgreSQL and pgvector inside Docker
-- Build a frontend with TypeScript and Next.js
-- Connect Next.js to a FastAPI backend
-- Implement health checks across application and database layers
-- Write automated tests with Pytest
-- Enforce Python code quality with Ruff
-- Validate frontend code with ESLint and TypeScript
-- Build production-ready Next.js applications
-- Manage secrets securely with environment variables
-- Prepare automated CI validation with GitHub Actions
+- document ingestion;
+- chunking;
+- embeddings;
+- pgvector;
+- semantic retrieval;
+- keyword search;
+- hybrid retrieval;
+- reranking;
+- metadata filters;
+- grounded answers;
+- citations;
+- retrieval evaluation.
 
-**Final deliverable:**  
-A working GenAI Enterprise Lab foundation with Next.js, FastAPI, PostgreSQL, pgvector, Docker, automated tests and CI-ready architecture.
+## Module 3 — Evaluation / Observability / LLMOps
 
----
+Planned:
 
-### Module 1 — Agentic AI & MCP
-
-Move from traditional LLM calls to systems capable of selecting tools, executing actions and managing multi-step workflows.
-
-**You will learn to:**
-
-- Understand the difference between an LLM, tool calling, workflow and AI agent
-- Design stateful agent workflows with LangGraph
-- Create specialized tools for agents
-- Implement routing and conditional execution
-- Manage agent state and execution context
-- Implement retries, error handling and fallback strategies
-- Use structured outputs for reliable agent responses
-- Add human-in-the-loop validation
-- Understand when to use one agent versus multiple agents
-- Build MCP servers and MCP clients
-- Expose enterprise APIs, databases and services through MCP
-- Secure tool execution and reduce agent permissions
-- Trace agent decisions and tool executions
-- Design deterministic boundaries around non-deterministic LLM behavior
-
-**Final deliverable:**  
-**AI Ops Investigator** — an agent capable of investigating an enterprise incident using logs, PostgreSQL, documentation and tools before producing a structured diagnosis.
+- LLM-as-Judge;
+- deterministic evaluators;
+- RAG evaluation;
+- prompt/model versioning;
+- regression testing;
+- OpenTelemetry;
+- Langfuse;
+- quality/cost/latency control tower;
+- production incidents;
+- canary and rollback;
+- Grafana for operational observability.
 
 ---
 
-### Module 2 — Enterprise RAG
+## Portfolio principle
 
-Build a production-oriented Retrieval-Augmented Generation system capable of answering questions from enterprise knowledge.
+Every module should leave the repository in a better state than it found it:
 
-**You will learn to:**
-
-- Understand embeddings and vector representations
-- Generate and store embeddings with pgvector
-- Design document ingestion pipelines
-- Parse PDF, Markdown and structured documents
-- Implement chunking strategies
-- Measure the impact of chunk size and overlap
-- Perform semantic vector search
-- Implement keyword and full-text search
-- Build hybrid retrieval systems
-- Apply metadata filtering
-- Implement Top-K retrieval
-- Add reranking
-- Perform query rewriting
-- Manage context windows and token budgets
-- Generate answers grounded in retrieved evidence
-- Add source citations
-- Detect insufficient evidence and refuse unsupported answers
-- Evaluate retrieval quality
-
-**Final deliverable:**  
-**Enterprise Knowledge Copilot** — a hybrid RAG application with semantic search, keyword search, reranking, metadata filtering and source citations.
-
----
-
-### Module 3 — LLM Evaluation & Observability
-
-Learn how to determine whether a GenAI system is actually improving instead of relying on subjective impressions.
-
-**You will learn to:**
-
-- Build evaluation datasets
-- Define ground-truth test cases
-- Measure answer correctness
-- Measure faithfulness
-- Measure context precision
-- Measure context recall
-- Detect hallucinations
-- Evaluate retrieval quality independently from generation quality
-- Compare prompts and models
-- Track input and output tokens
-- Measure inference latency
-- Calculate cost per request
-- Measure P50 and P95 latency
-- Trace LLM calls and agent executions
-- Instrument applications with Langfuse
-- Understand OpenTelemetry traces, metrics and logs
-- Detect regressions after application changes
-- Build repeatable evaluation pipelines
-- Compare architectures using measurable KPIs
-
-**Final deliverable:**  
-**LLM Quality Observatory** — a monitoring and evaluation cockpit for quality, latency, tokens, cost, retrieval performance and LLM traces.
-
----
-
-### Module 4 — PromptOps
-
-Move beyond basic prompt engineering and manage prompts as production software assets.
-
-**You will learn to:**
-
-- Design system prompts
-- Separate system, user and business instructions
-- Implement few-shot prompting
-- Build reusable prompt templates
-- Manage dynamic prompt variables
-- Use structured outputs
-- Validate LLM responses with Pydantic and JSON Schema
-- Implement function and tool calling
-- Control context composition
-- Optimize token usage
-- Compress large contexts
-- Version prompts with Git
-- Compare prompt versions
-- Build automated prompt regression tests
-- Perform A/B testing
-- Detect prompt injection
-- Protect tools and retrieved context
-- Implement guardrails
-- Measure prompt quality, cost and latency
-
-**Final deliverable:**  
-**PromptOps Workbench** — a platform for versioning, testing, comparing and evaluating production prompts.
-
----
-
-### Module 5 — End-to-End AI Data Analyst Platform
-
-Combine everything learned in the previous modules into a complete enterprise GenAI application.
-
-**You will learn to:**
-
-- Design an end-to-end GenAI architecture
-- Connect LLMs to structured enterprise data
-- Build SQL tools for AI agents
-- Allow agents to query PostgreSQL safely
-- Integrate RAG with structured data analysis
-- Orchestrate multiple tools through LangGraph
-- Use MCP to expose external capabilities
-- Generate business-oriented analytical answers
-- Validate AI-generated calculations
-- Implement agent guardrails
-- Implement application-level security boundaries
-- Manage asynchronous processing
-- Build resilient API services
-- Integrate FastAPI and Next.js
-- Stream AI responses to the frontend
-- Containerize the complete application
-- Automate testing with GitHub Actions
-- Add LLM observability
-- Monitor performance, cost and quality
-- Prepare the application for deployment
-
-**Final deliverable:**  
-**AI Data Analyst Platform** — a production-oriented GenAI application capable of querying business data, retrieving enterprise knowledge, using tools, validating results and explaining its conclusions.
-
----
-
-## Portfolio Outcome
-
-At the end of the roadmap, the repository will contain complete GenAI systems rather than isolated notebooks or proofs of concept.
-
-Each module will include:
-
-- Production-oriented source code
-- Architecture diagrams
-- Automated tests
-- Docker configuration
-- Documented SQL queries
-- Versioned prompts
-- Evaluation results
-- Technical documentation
-- Demo screenshots
-- Short demonstration video
-- LinkedIn-ready technical publication
+**learn → build → test → document → publish**
